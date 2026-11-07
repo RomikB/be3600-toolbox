@@ -1,0 +1,34 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:BE3600Toolbox.Desktop.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="400"
+        x:Class="BE3600Toolbox.Desktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Xiaomi BE3600 Toolbox"
+        Width="650" Height="450"
+        WindowStartupLocation="CenterScreen">
+
+    <StackPanel Margin="24" Spacing="16">
+        <TextBlock Text="Xiaomi BE3600 Toolbox" FontSize="20" FontWeight="Bold" />
+        <TextBlock Text="Cross-platform utility for SSH unlock, localization, and OpenWrt flashing"
+                   Foreground="Gray" />
+
+        <Separator />
+
+        <StackPanel Orientation="Horizontal" Spacing="12">
+            <TextBlock Text="Router IP:" VerticalAlignment="Center" Width="80" />
+            <TextBox Text="{Binding RouterIp}" Width="200" IsEnabled="{Binding !IsBusy}" Watermark="e.g. 192.168.31.1" />
+            <Button Content="Connect" Command="{Binding CheckRouterCommand}" IsEnabled="{Binding !IsBusy}" />
+            <Button Content="Auto-Detect" Command="{Binding AutoDetectRouterCommand}" IsEnabled="{Binding !IsBusy}" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button Content="Unlock SSH" Command="{Binding UnlockSshCommand}" IsEnabled="{Binding !IsBusy}" />
+        </StackPanel>
+
+        <ProgressBar Value="{Binding ProgressValue}" Maximum="100" IsIndeterminate="{Binding IsBusy}" Height="8" IsVisible="{Binding IsBusy}" />
+        <TextBlock Text="{Binding StatusMessage}" FontStyle="Italic" />
+    </StackPanel>
+</Window>

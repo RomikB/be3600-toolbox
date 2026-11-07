@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BE3600Toolbox.Cli/BE3600Toolbox.Cli.csproj" />
+    <Project Path="src/BE3600Toolbox.Core/BE3600Toolbox.Core.csproj" />
+    <Project Path="src/BE3600Toolbox.Desktop/BE3600Toolbox.Desktop.csproj" />
+    <Project Path="src/BE3600Toolbox.Engine/BE3600Toolbox.Engine.csproj" />
+  </Folder>
+</Solution>
