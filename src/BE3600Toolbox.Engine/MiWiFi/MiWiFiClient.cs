@@ -312,7 +312,7 @@ public class MiWiFiClient : IRouterService
 
             progress?.Report(new StepProgress("Applying permanent SSH patch...", 75));
             var output = await _sshManager.ExecuteCommandAsync(
-                "chmod +x /tmp/ssh_install.sh /tmp/ssh_patch.sh && /bin/sh /tmp/ssh_install.sh && rm -f /tmp/ssh_patch.log && /bin/sh /etc/crontabs/patches/ssh_patch.sh && rm -f /tmp/ssh_install.sh",
+                "chmod +x /tmp/ssh_install.sh /tmp/ssh_patch.sh && /bin/sh /tmp/ssh_install.sh && rm -f /tmp/ssh_install.sh",
                 ct).ConfigureAwait(false);
 
             _logger.LogInformation("Permanent SSH install script output: {Output}", output);
