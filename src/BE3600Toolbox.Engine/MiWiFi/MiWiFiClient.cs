@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using BE3600Toolbox.Core.Models;
 using BE3600Toolbox.Core.Services;
+using BE3600Toolbox.Engine.Assets;
+using BE3600Toolbox.Engine.Localization;
 using Microsoft.Extensions.Logging;
 
 namespace BE3600Toolbox.Engine.MiWiFi;
@@ -15,12 +17,14 @@ public class MiWiFiClient : IRouterService
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromMilliseconds(800);
 
     private readonly HttpClient _httpClient;
+    private readonly ISshManager? _sshManager;
     private readonly ILogger<MiWiFiClient> _logger;
 
-    public MiWiFiClient(HttpClient httpClient, ILogger<MiWiFiClient> logger)
+    public MiWiFiClient(HttpClient httpClient, ILogger<MiWiFiClient> logger, ISshManager? sshManager = null)
     {
         _httpClient = httpClient;
         _logger = logger;
+        _sshManager = sshManager;
     }
 
     public async Task<DetectedRouter?> DetectRouterAsync(CancellationToken ct = default)
@@ -73,13 +77,17 @@ public class MiWiFiClient : IRouterService
             var model = root.TryGetProperty("hardware", out var hw) ? hw.GetString() ?? "Unknown" : "Unknown";
             var version = root.TryGetProperty("romversion", out var rom) ? rom.GetString() ?? "Unknown" : "Unknown";
             var channel = root.TryGetProperty("channel", out var ch) ? ch.GetString() : null;
+            var sn = root.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.String
+                ? idProp.GetString()?.Trim()
+                : null;
 
             return new RouterInfo(
                 IpAddress: ipAddress,
                 Model: model,
                 HardwareVersion: model,
                 FirmwareVersion: version,
-                Channel: channel);
+                Channel: channel,
+                SerialNumber: string.IsNullOrWhiteSpace(sn) ? null : sn);
         }
         catch (Exception ex)
         {
@@ -207,12 +215,142 @@ public class MiWiFiClient : IRouterService
         return true;
     }
 
-    public async Task<bool> InstallLocalizationAsync(string ipAddress, string language, IProgress<StepProgress>? progress = null, CancellationToken ct = default)
+    public async Task<bool> InstallLanguagesAsync(string ipAddress, IProgress<StepProgress>? progress = null, CancellationToken ct = default)
     {
-        progress?.Report(new StepProgress($"Installing {language} language pack", 20));
-        _logger.LogInformation("Installing localization ({Language}) on {IpAddress}...", language, ipAddress);
+        _logger.LogInformation("Starting EN/RU language installation for {IpAddress}...", ipAddress);
+
+        progress?.Report(new StepProgress("Compiling language packs (EN/RU)...", 10));
+        var enLmo = LmoConverter.ConvertPoResourceToLmo("BE3600Toolbox.Engine.Assets.base.en.po");
+        var ruLmo = LmoConverter.ConvertPoResourceToLmo("BE3600Toolbox.Engine.Assets.base.ru.po");
+
+        if (_sshManager != null && _sshManager.IsConnected)
+        {
+            progress?.Report(new StepProgress("Uploading base.en.lmo to router...", 30));
+            using (var enStream = new MemoryStream(enLmo))
+            {
+                await _sshManager.UploadFileAsync(enStream, "/tmp/base.en.lmo", null, ct).ConfigureAwait(false);
+            }
+
+            progress?.Report(new StepProgress("Uploading base.ru.lmo to router...", 50));
+            using (var ruStream = new MemoryStream(ruLmo))
+            {
+                await _sshManager.UploadFileAsync(ruStream, "/tmp/base.ru.lmo", null, ct).ConfigureAwait(false);
+            }
+
+            progress?.Report(new StepProgress("Uploading installation scripts...", 70));
+            using (var patchStream = EmbeddedAssetReader.OpenRead("lang_patch.sh"))
+            {
+                await _sshManager.UploadFileAsync(patchStream, "/tmp/lang_patch.sh", null, ct).ConfigureAwait(false);
+            }
+
+            using (var installStream = EmbeddedAssetReader.OpenRead("lang_install.sh"))
+            {
+                await _sshManager.UploadFileAsync(installStream, "/tmp/lang_install.sh", null, ct).ConfigureAwait(false);
+            }
+
+            progress?.Report(new StepProgress("Applying localization patch...", 85));
+            var output = await _sshManager.ExecuteCommandAsync(
+                "chmod +x /tmp/lang_install.sh /tmp/lang_patch.sh && /bin/sh /tmp/lang_install.sh && rm -f /tmp/lang_install.sh",
+                ct).ConfigureAwait(false);
+
+            _logger.LogInformation("Language install script output: {Output}", output);
+            progress?.Report(new StepProgress("EN/RU language installation completed", 100));
+            return true;
+        }
+
+        _logger.LogWarning("SSH manager is not connected, simulated localization.");
         await Task.Delay(300, ct).ConfigureAwait(false);
-        progress?.Report(new StepProgress("Localization completed", 100));
+        progress?.Report(new StepProgress("Localization completed (simulated)", 100));
+        return true;
+    }
+
+    public async Task<bool> UninstallLanguagesAsync(string ipAddress, IProgress<StepProgress>? progress = null, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Starting EN/RU language uninstallation for {IpAddress}...", ipAddress);
+
+        if (_sshManager != null && _sshManager.IsConnected)
+        {
+            progress?.Report(new StepProgress("Uploading uninstall script...", 30));
+            using (var uninstallStream = EmbeddedAssetReader.OpenRead("lang_uninstall.sh"))
+            {
+                await _sshManager.UploadFileAsync(uninstallStream, "/tmp/lang_uninstall.sh", null, ct).ConfigureAwait(false);
+            }
+
+            progress?.Report(new StepProgress("Executing language uninstallation on router...", 60));
+            var output = await _sshManager.ExecuteCommandAsync(
+                "chmod +x /tmp/lang_uninstall.sh && /bin/sh /tmp/lang_uninstall.sh && rm -f /tmp/lang_uninstall.sh",
+                ct).ConfigureAwait(false);
+
+            _logger.LogInformation("Language uninstall script output: {Output}", output);
+            progress?.Report(new StepProgress("EN/RU language uninstallation completed", 100));
+            return true;
+        }
+
+        _logger.LogWarning("SSH manager is not connected, simulated uninstallation.");
+        await Task.Delay(300, ct).ConfigureAwait(false);
+        progress?.Report(new StepProgress("Language uninstallation completed (simulated)", 100));
+        return true;
+    }
+
+    public async Task<bool> InstallPermanentSshAsync(string ipAddress, IProgress<StepProgress>? progress = null, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Starting permanent SSH installation for {IpAddress}...", ipAddress);
+
+        if (_sshManager != null && _sshManager.IsConnected)
+        {
+            progress?.Report(new StepProgress("Uploading permanent SSH patch script...", 25));
+            using (var patchStream = EmbeddedAssetReader.OpenRead("ssh_patch.sh"))
+            {
+                await _sshManager.UploadFileAsync(patchStream, "/tmp/ssh_patch.sh", null, ct).ConfigureAwait(false);
+            }
+
+            progress?.Report(new StepProgress("Uploading permanent SSH installer script...", 50));
+            using (var installStream = EmbeddedAssetReader.OpenRead("ssh_install.sh"))
+            {
+                await _sshManager.UploadFileAsync(installStream, "/tmp/ssh_install.sh", null, ct).ConfigureAwait(false);
+            }
+
+            progress?.Report(new StepProgress("Applying permanent SSH patch...", 75));
+            var output = await _sshManager.ExecuteCommandAsync(
+                "chmod +x /tmp/ssh_install.sh /tmp/ssh_patch.sh && /bin/sh /tmp/ssh_install.sh && rm -f /tmp/ssh_patch.log && /bin/sh /etc/crontabs/patches/ssh_patch.sh && rm -f /tmp/ssh_install.sh",
+                ct).ConfigureAwait(false);
+
+            _logger.LogInformation("Permanent SSH install script output: {Output}", output);
+            progress?.Report(new StepProgress("Permanent SSH installed successfully", 100));
+            return true;
+        }
+
+        _logger.LogWarning("SSH manager is not connected, simulated permanent SSH installation.");
+        await Task.Delay(300, ct).ConfigureAwait(false);
+        progress?.Report(new StepProgress("Permanent SSH installation completed (simulated)", 100));
+        return true;
+    }
+
+    public async Task<bool> UninstallPermanentSshAsync(string ipAddress, IProgress<StepProgress>? progress = null, CancellationToken ct = default)
+    {
+        _logger.LogInformation("Starting permanent SSH uninstallation for {IpAddress}...", ipAddress);
+
+        if (_sshManager != null && _sshManager.IsConnected)
+        {
+            progress?.Report(new StepProgress("Uploading permanent SSH uninstall script...", 30));
+            using (var uninstallStream = EmbeddedAssetReader.OpenRead("ssh_uninstall.sh"))
+            {
+                await _sshManager.UploadFileAsync(uninstallStream, "/tmp/ssh_uninstall.sh", null, ct).ConfigureAwait(false);
+            }
+
+            progress?.Report(new StepProgress("Executing permanent SSH uninstallation...", 70));
+            var output = await _sshManager.ExecuteCommandAsync(
+                "chmod +x /tmp/ssh_uninstall.sh && /bin/sh /tmp/ssh_uninstall.sh && rm -f /tmp/ssh_uninstall.sh",
+                ct).ConfigureAwait(false);
+
+            _logger.LogInformation("Permanent SSH uninstall script output: {Output}", output);
+            progress?.Report(new StepProgress("Permanent SSH uninstalled successfully", 100));
+            return true;
+        }
+
+        _logger.LogWarning("SSH manager is not connected, simulated permanent SSH uninstallation.");
+        await Task.Delay(300, ct).ConfigureAwait(false);
+        progress?.Report(new StepProgress("Permanent SSH uninstallation completed (simulated)", 100));
         return true;
     }
 }

@@ -6,5 +6,7 @@ public record RouterInfo(
     string HardwareVersion,
     string FirmwareVersion,
     string? Channel = null,
-    bool IsSshOpen = false);
+    bool IsSshOpen = false,
+    string? SerialNumber = null);
+
 

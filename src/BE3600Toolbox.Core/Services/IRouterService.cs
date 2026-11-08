@@ -8,5 +8,8 @@ public interface IRouterService
     Task<RouterInfo> GetDeviceInfoAsync(string ipAddress, CancellationToken ct = default);
     Task<string> AcquireStokAsync(string ipAddress, string password, CancellationToken ct = default);
     Task<bool> UnlockSshAsync(string ipAddress, string stok, IProgress<StepProgress>? progress = null, CancellationToken ct = default);
-    Task<bool> InstallLocalizationAsync(string ipAddress, string language, IProgress<StepProgress>? progress = null, CancellationToken ct = default);
+    Task<bool> InstallLanguagesAsync(string ipAddress, IProgress<StepProgress>? progress = null, CancellationToken ct = default);
+    Task<bool> UninstallLanguagesAsync(string ipAddress, IProgress<StepProgress>? progress = null, CancellationToken ct = default);
+    Task<bool> InstallPermanentSshAsync(string ipAddress, IProgress<StepProgress>? progress = null, CancellationToken ct = default);
+    Task<bool> UninstallPermanentSshAsync(string ipAddress, IProgress<StepProgress>? progress = null, CancellationToken ct = default);
 }

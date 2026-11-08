@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using BE3600Toolbox.Core.Services;
 using Microsoft.Extensions.Logging;
 using Renci.SshNet;
@@ -17,23 +18,73 @@ public class SshManager : ISshManager
 
     public bool IsConnected => _sshClient?.IsConnected == true;
 
+    public async Task<bool> IsPortOpenAsync(string host, int port = 22, TimeSpan? timeout = null, CancellationToken ct = default)
+    {
+        try
+        {
+            using var client = new TcpClient();
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(timeout ?? TimeSpan.FromSeconds(2));
+
+            await client.ConnectAsync(host, port, cts.Token).ConfigureAwait(false);
+            return client.Connected;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public Task ConnectAsync(string host, int port, string username, string password, CancellationToken ct = default)
     {
         _logger.LogInformation("Connecting to SSH at {Host}:{Port} as {User}...", host, port, username);
-        
+
+        DisconnectInternal();
+
         var connectionInfo = new ConnectionInfo(host, port, username, new PasswordAuthenticationMethod(username, password))
         {
-            Timeout = TimeSpan.FromSeconds(10)
+            Timeout = TimeSpan.FromSeconds(5)
         };
 
-        _sshClient = new SshClient(connectionInfo);
-        _scpClient = new ScpClient(connectionInfo);
+        var sshClient = new SshClient(connectionInfo);
+        var scpClient = new ScpClient(connectionInfo);
 
-        _sshClient.Connect();
-        _scpClient.Connect();
+        try
+        {
+            sshClient.Connect();
+            scpClient.Connect();
 
-        _logger.LogInformation("SSH connected successfully to {Host}", host);
-        return Task.CompletedTask;
+            _sshClient = sshClient;
+            _scpClient = scpClient;
+
+            _logger.LogInformation("SSH connected successfully to {Host}", host);
+            return Task.CompletedTask;
+        }
+        catch
+        {
+            sshClient.Dispose();
+            scpClient.Dispose();
+            throw;
+        }
+    }
+
+    public async Task<bool> TryConnectAsync(string host, int port, string username, string password, CancellationToken ct = default)
+    {
+        try
+        {
+            await ConnectAsync(host, port, username, password, ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (Renci.SshNet.Common.SshAuthenticationException)
+        {
+            _logger.LogWarning("SSH authentication failed for {User}@{Host}:{Port}", username, host, port);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to connect to SSH at {Host}:{Port}", host, port);
+            return false;
+        }
     }
 
     public Task<string> ExecuteCommandAsync(string command, CancellationToken ct = default)
@@ -95,7 +146,7 @@ public class SshManager : ISshManager
         return Task.CompletedTask;
     }
 
-    public Task DisconnectAsync()
+    private void DisconnectInternal()
     {
         _scpClient?.Disconnect();
         _scpClient?.Dispose();
@@ -104,7 +155,11 @@ public class SshManager : ISshManager
         _sshClient?.Disconnect();
         _sshClient?.Dispose();
         _sshClient = null;
+    }
 
+    public Task DisconnectAsync()
+    {
+        DisconnectInternal();
         _logger.LogInformation("SSH disconnected.");
         return Task.CompletedTask;
     }

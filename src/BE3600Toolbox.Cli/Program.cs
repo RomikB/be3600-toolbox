@@ -2,14 +2,101 @@ using BE3600Toolbox.Cli.Logging;
 using BE3600Toolbox.Cli.Services;
 using BE3600Toolbox.Core.Models;
 using BE3600Toolbox.Core.Services;
+using BE3600Toolbox.Core.Utilities;
 using BE3600Toolbox.Engine.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Console;
 
+if (args.Any(a => a.Equals("--test-lmo", StringComparison.OrdinalIgnoreCase)))
+{
+    foreach (var lang in new[] { "en", "ru" })
+    {
+        Console.WriteLine($"--- Testing base.{lang}.po -> base.{lang}.lmo ---");
+        var converted = BE3600Toolbox.Engine.Localization.LmoConverter.ConvertPoResourceToLmo($"BE3600Toolbox.Engine.Assets.base.{lang}.po");
+        var lmoPath = $"base.{lang}.lmo";
+        if (File.Exists(lmoPath))
+        {
+            var refBytes = File.ReadAllBytes(lmoPath);
+            Console.WriteLine($"Converted Length: {converted.Length}, Ref Length: {refBytes.Length}");
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            var cHash = Convert.ToHexString(sha.ComputeHash(converted));
+            var rHash = Convert.ToHexString(sha.ComputeHash(refBytes));
+            Console.WriteLine($"Converted SHA256: {cHash}");
+            Console.WriteLine($"Ref SHA256:       {rHash}");
+            Console.WriteLine(cHash == rHash ? "SUCCESS: 100% BIT-FOR-BIT IDENTICAL!" : "FAILURE: MISMATCH");
+        }
+        else
+        {
+            Console.WriteLine($"Converted Length: {converted.Length}");
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            Console.WriteLine($"Converted SHA256: {Convert.ToHexString(sha.ComputeHash(converted))}");
+        }
+    }
+    return;
+}
+
+if (args.Any(a => a.Equals("--help", StringComparison.OrdinalIgnoreCase) || a.Equals("-h", StringComparison.OrdinalIgnoreCase)))
+{
+    Console.WriteLine("=======================================");
+    Console.WriteLine("  Xiaomi BE3600 Toolbox (CLI Mode)");
+    Console.WriteLine("=======================================");
+    Console.WriteLine();
+    Console.WriteLine("Usage: BE3600Toolbox.Cli [options]");
+    Console.WriteLine();
+    Console.WriteLine("Options:");
+    Console.WriteLine("  -v, --verbose [level]    Enable verbose console logging (default: Information)");
+    Console.WriteLine("  -h, --help               Show help information");
+    return;
+}
+
+var minLogLevel = LogLevel.Warning;
+
+for (var i = 0; i < args.Length; i++)
+{
+    var arg = args[i];
+    if (arg.Equals("--verbose", StringComparison.OrdinalIgnoreCase) ||
+        arg.Equals("-v", StringComparison.OrdinalIgnoreCase))
+    {
+        if (i + 1 < args.Length && Enum.TryParse<LogLevel>(args[i + 1], ignoreCase: true, out var parsedLevel))
+        {
+            minLogLevel = parsedLevel;
+            i++;
+        }
+        else
+        {
+            minLogLevel = LogLevel.Information;
+        }
+    }
+    else if (arg.StartsWith("--verbose=", StringComparison.OrdinalIgnoreCase))
+    {
+        var val = arg["--verbose=".Length..];
+        if (Enum.TryParse<LogLevel>(val, ignoreCase: true, out var parsedLevel))
+        {
+            minLogLevel = parsedLevel;
+        }
+        else
+        {
+            minLogLevel = LogLevel.Information;
+        }
+    }
+    else if (arg.Equals("--debug", StringComparison.OrdinalIgnoreCase) ||
+             arg.Equals("-vv", StringComparison.OrdinalIgnoreCase))
+    {
+        minLogLevel = LogLevel.Debug;
+    }
+}
+
 Console.WriteLine("=======================================");
 Console.WriteLine("  Xiaomi BE3600 Toolbox (CLI Mode)");
 Console.WriteLine("=======================================");
+
+if (minLogLevel < LogLevel.Warning)
+{
+    Console.ForegroundColor = ConsoleColor.DarkGray;
+    Console.WriteLine($"[*] Verbose logging enabled (level: {minLogLevel})");
+    Console.ResetColor();
+}
 
 var services = new ServiceCollection();
 services.AddLogging(b =>
@@ -17,7 +104,7 @@ services.AddLogging(b =>
     b.ClearProviders();
     b.AddConsole(opts => opts.FormatterName = CleanConsoleFormatter.FormatterName)
      .AddConsoleFormatter<CleanConsoleFormatter, ConsoleFormatterOptions>();
-    b.SetMinimumLevel(LogLevel.Information);
+    b.SetMinimumLevel(minLogLevel);
     b.AddFilter("System.Net.Http", LogLevel.Warning);
 });
 services.AddSingleton<IInteractionService, CliInteractionService>();
@@ -26,7 +113,9 @@ services.AddBe3600Engine();
 var provider = services.BuildServiceProvider();
 var settingsService = provider.GetRequiredService<ISettingsService>();
 var router = provider.GetRequiredService<IRouterService>();
+var sshManager = provider.GetRequiredService<ISshManager>();
 var interaction = provider.GetRequiredService<IInteractionService>();
+var logger = provider.GetRequiredService<ILogger<Program>>();
 
 await settingsService.LoadAsync();
 
@@ -35,24 +124,20 @@ var ip = settingsService.Settings.RouterIp;
 // 1. Auto-detect if IP is empty
 if (string.IsNullOrWhiteSpace(ip))
 {
-    Console.WriteLine("[*] Auto-detecting router on 192.168.31.1 (stock MiWiFi)...");
+    logger.LogInformation("[*] Auto-detecting router on 192.168.31.1 (stock MiWiFi)...");
     var detected = await router.DetectRouterAsync();
     if (detected != null)
     {
-        Console.ForegroundColor = ConsoleColor.Green;
-        Console.WriteLine($"[+] Found {detected.Description} at {detected.IpAddress}");
-        Console.ResetColor();
+        logger.LogInformation($"[+] Found {detected.Description} at {detected.IpAddress}");
 
         ip = detected.IpAddress;
         await settingsService.UpdateAsync(s => s.RouterIp = ip);
     }
     else
     {
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine("[-] No stock router responded on 192.168.31.1.");
-        Console.ResetColor();
+        logger.LogInformation("[-] No stock router responded on 192.168.31.1.");
 
-        ip = await interaction.PromptInputAsync("Please enter Router IP manually");
+        ip = await interaction.PromptInputAsync("Please enter router ip");
         if (!string.IsNullOrWhiteSpace(ip))
         {
             await settingsService.UpdateAsync(s => s.RouterIp = ip);
@@ -61,7 +146,7 @@ if (string.IsNullOrWhiteSpace(ip))
 }
 else
 {
-    Console.WriteLine($"[*] Using saved router IP: {ip}");
+    logger.LogInformation($"[*] Using saved router IP: {ip}");
 }
 
 var progress = new Progress<StepProgress>(p =>
@@ -71,23 +156,30 @@ var progress = new Progress<StepProgress>(p =>
 });
 
 // 2. Main interactive menu loop
+const string OptConnectDevice = "Connect to device (unlock ssh)";
+const string OptInstallLanguages = "Install EN/RU languages";
+const string OptPermanentSsh = "Install permanent SSH";
+const string OptFlashOpenWrt = "Flash OpenWrt (Safe Mode / Dry Run)";
+const string OptUninstallLanguages = "Uninstall EN/RU languages";
+const string OptExit = "Exit";
+
 while (true)
 {
-    var targetLabel = string.IsNullOrWhiteSpace(ip) ? "Not set" : ip;
-    Console.WriteLine($"\n[Target Router IP: {targetLabel}]");
+    var currentIpLabel = string.IsNullOrWhiteSpace(ip) ? "not set" : ip;
+    var optSetIp = $"Set IP-address (current value: {currentIpLabel})";
 
     var action = await interaction.SelectOptionAsync("Select Action", new[]
     {
-        "1. Change Router IP (manual entry)",
-        "2. Read Router Info",
-        "3. Unlock SSH",
-        "4. Install Russian Language",
-        "5. Install English Language",
-        "6. Flash OpenWrt (Safe Mode / Dry Run)",
-        "7. Exit"
+        optSetIp,
+        OptConnectDevice,
+        OptInstallLanguages,
+        OptPermanentSsh,
+        OptFlashOpenWrt,
+        OptUninstallLanguages,
+        OptExit
     });
 
-    if (action.StartsWith("1"))
+    if (action == optSetIp)
     {
         var newIp = await interaction.PromptInputAsync("Enter new Router IP", ip);
         if (!string.IsNullOrWhiteSpace(newIp))
@@ -99,7 +191,7 @@ while (true)
         continue;
     }
 
-    if (action.StartsWith("7"))
+    if (action == OptExit)
     {
         Console.WriteLine("Exiting. Goodbye!");
         break;
@@ -109,65 +201,189 @@ while (true)
     if (string.IsNullOrWhiteSpace(ip))
     {
         Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine("[-] Router IP is not set. Please select option 1 first.");
+        Console.WriteLine("[-] Router IP is not set. Please configure it first.");
         Console.ResetColor();
         continue;
     }
 
     try
     {
-        if (action.StartsWith("2"))
+        switch (action)
         {
-            var info = await router.GetDeviceInfoAsync(ip);
-            Console.WriteLine($"\nModel: {info.Model}\nFirmware: {info.FirmwareVersion}\nChannel: {info.Channel ?? "N/A"}");
-        }
-        else if (action.StartsWith("3"))
-        {
-            var password = await interaction.PromptInputAsync("Enter router admin password");
-            if (string.IsNullOrWhiteSpace(password))
-            {
-                Console.WriteLine("Authentication cancelled.");
-                continue;
-            }
+            case OptConnectDevice:
+                var password = await interaction.PromptInputAsync("Enter router admin password");
+                if (string.IsNullOrWhiteSpace(password))
+                {
+                    Console.WriteLine("Authentication cancelled.");
+                    continue;
+                }
 
-            Console.WriteLine("[*] Authenticating with router to acquire stok...");
-            var stok = await router.AcquireStokAsync(ip, password);
+                Console.WriteLine("[*] Authenticating with router to acquire stok...");
+                var stok = await router.AcquireStokAsync(ip, password);
 
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"[+] Authentication successful! Acquired stok={stok}");
-            Console.ResetColor();
-
-            Console.WriteLine("[*] Sending commands to unlock ssh...");
-            var success = await router.UnlockSshAsync(ip, stok, progress);
-            if (success)
-            {
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine($"[+] SSH unlock successful!");
+                Console.WriteLine($"[+] Authentication successful! Acquired stok={stok}");
                 Console.ResetColor();
-            }
-        }
-        else if (action.StartsWith("4"))
-        {
-            await router.InstallLocalizationAsync(ip, "ru", progress);
-            await settingsService.UpdateAsync(s => s.Language = "ru");
-            Console.WriteLine("[+] Russian localization installed.");
-        }
-        else if (action.StartsWith("5"))
-        {
-            await router.InstallLocalizationAsync(ip, "en", progress);
-            await settingsService.UpdateAsync(s => s.Language = "en");
-            Console.WriteLine("[+] English localization installed.");
-        }
-        else if (action.StartsWith("6"))
-        {
-            var flash = provider.GetRequiredService<IFlashService>();
-            await flash.FlashOpenWrtAsync("dummy_firmware.bin", dryRun: true, progress);
+
+                Console.WriteLine("[*] Sending commands to unlock ssh...");
+                var success = await router.UnlockSshAsync(ip, stok, progress);
+                if (success)
+                {
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine($"[+] SSH unlock successful!");
+                    Console.ResetColor();
+                }
+                break;
+
+            case OptInstallLanguages:
+                if (!await EnsureSshConnectedAsync(ip))
+                {
+                    continue;
+                }
+
+                await router.InstallLanguagesAsync(ip, progress);
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("[+] EN/RU languages installed successfully.");
+                Console.ResetColor();
+                break;
+
+            case OptPermanentSsh:
+                if (!await EnsureSshConnectedAsync(ip))
+                {
+                    continue;
+                }
+
+                await router.InstallPermanentSshAsync(ip, progress);
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("[+] Permanent SSH installed successfully.");
+                Console.ResetColor();
+                break;
+
+            case OptFlashOpenWrt:
+                var flash = provider.GetRequiredService<IFlashService>();
+                await flash.FlashOpenWrtAsync("dummy_firmware.bin", dryRun: true, progress);
+                break;
+
+            case OptUninstallLanguages:
+                if (!await EnsureSshConnectedAsync(ip))
+                {
+                    continue;
+                }
+
+                await router.UninstallLanguagesAsync(ip, progress);
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("[+] EN/RU languages uninstalled successfully.");
+                Console.ResetColor();
+                break;
         }
     }
     catch (Exception ex)
     {
         Console.ForegroundColor = ConsoleColor.Red;
         Console.WriteLine($"[-] Error: {ex.Message}");
+        Console.ResetColor();
+    }
+}
+
+async Task<bool> CheckSshPortAsync(string targetIp, int port = 22)
+{
+    Console.WriteLine($"[*] Checking SSH availability on {targetIp}:{port}...");
+    var isOpen = await sshManager.IsPortOpenAsync(targetIp, port);
+    if (!isOpen)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"[-] SSH is not available on {targetIp}:{port}. Port is closed or unreachable.");
+        Console.WriteLine("[-] Please unlock SSH first (select option 2).");
+        Console.ResetColor();
+        return false;
+    }
+
+    Console.ForegroundColor = ConsoleColor.Green;
+    Console.WriteLine($"[+] SSH port {port} is open on {targetIp}.");
+    Console.ResetColor();
+    return true;
+}
+
+async Task<string?> GetDefaultSshPasswordAsync(string targetIp)
+{
+    try
+    {
+        Console.WriteLine("[*] Retrieving router serial number via init_info...");
+        var info = await router.GetDeviceInfoAsync(targetIp);
+        if (!string.IsNullOrWhiteSpace(info.SerialNumber))
+        {
+            var preparedSn = XiaomiPasswordCalculator.NormalizeSerialNumber(info.SerialNumber);
+            var pwd = XiaomiPasswordCalculator.Calculate(preparedSn);
+            Console.WriteLine($"[+] Router S/N detected: {preparedSn}");
+            return pwd;
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Failed to retrieve device serial number from {Ip}", targetIp);
+    }
+
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.WriteLine("[-] Could not retrieve router serial number automatically.");
+    Console.ResetColor();
+    return null;
+}
+
+async Task<bool> EnsureSshConnectedAsync(string targetIp)
+{
+    if (sshManager.IsConnected)
+    {
+        return true;
+    }
+
+    var port = settingsService.Settings.SshPort;
+    var user = settingsService.Settings.SshUser;
+
+    // 1. Check SSH port availability
+    if (!await CheckSshPortAsync(targetIp, port))
+    {
+        return false;
+    }
+
+    // 2. Try default password calculated from router serial number
+    var defaultPassword = await GetDefaultSshPasswordAsync(targetIp);
+    if (!string.IsNullOrWhiteSpace(defaultPassword))
+    {
+        Console.WriteLine($"[*] Trying calculated default SSH password ('{defaultPassword}')...");
+        if (await sshManager.TryConnectAsync(targetIp, port, user, defaultPassword))
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("[+] SSH connected successfully using calculated default password!");
+            Console.ResetColor();
+            return true;
+        }
+
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Console.WriteLine("[-] Calculated default password rejected.");
+        Console.ResetColor();
+    }
+
+    // 3. Prompt user for password if default didn't work
+    while (true)
+    {
+        var password = await interaction.PromptPasswordAsync($"Enter SSH password for '{user}' (leave empty to cancel)");
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            Console.WriteLine("[-] SSH authentication cancelled.");
+            return false;
+        }
+
+        Console.WriteLine("[*] Authenticating with SSH...");
+        if (await sshManager.TryConnectAsync(targetIp, port, user, password))
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("[+] SSH connected successfully!");
+            Console.ResetColor();
+            return true;
+        }
+
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine("[-] SSH authentication failed. Invalid password, please try again.");
         Console.ResetColor();
     }
 }
