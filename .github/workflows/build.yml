@@ -1,0 +1,138 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows (win-x64 Desktop & CLI)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore BE3600Toolbox.slnx
+
+      - name: Publish Desktop (Avalonia GUI - win-x64 Standalone)
+        run: dotnet publish src/BE3600Toolbox.Desktop/BE3600Toolbox.Desktop.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o ./dist/desktop
+
+      - name: Publish CLI (Console - win-x64 Standalone)
+        run: dotnet publish src/BE3600Toolbox.Cli/BE3600Toolbox.Cli.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o ./dist/cli
+
+      - name: Create ZIP archives
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path ./dist/archives
+          Compress-Archive -Path ./dist/desktop/* -DestinationPath ./dist/archives/BE3600Toolbox-Desktop-win-x64.zip -Force
+          Compress-Archive -Path ./dist/cli/* -DestinationPath ./dist/archives/BE3600Toolbox-Cli-win-x64.zip -Force
+
+      - name: Upload Desktop Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: BE3600Toolbox-Desktop-win-x64
+          path: ./dist/archives/BE3600Toolbox-Desktop-win-x64.zip
+          if-no-files-found: error
+
+      - name: Upload CLI Artifact (win-x64)
+        uses: actions/upload-artifact@v7
+        with:
+          name: BE3600Toolbox-Cli-win-x64
+          path: ./dist/archives/BE3600Toolbox-Cli-win-x64.zip
+          if-no-files-found: error
+
+  build-cli-crossplatform:
+    name: Build CLI (${{ matrix.target.rid }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - rid: linux-x64
+            name: BE3600Toolbox-Cli-linux-x64
+          - rid: linux-arm64
+            name: BE3600Toolbox-Cli-linux-arm64
+          - rid: osx-x64
+            name: BE3600Toolbox-Cli-osx-x64
+          - rid: osx-arm64
+            name: BE3600Toolbox-Cli-osx-arm64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore src/BE3600Toolbox.Cli/BE3600Toolbox.Cli.csproj -r ${{ matrix.target.rid }}
+
+      - name: Publish CLI Standalone (${{ matrix.target.rid }})
+        run: |
+          dotnet publish src/BE3600Toolbox.Cli/BE3600Toolbox.Cli.csproj \
+            -c Release \
+            -r ${{ matrix.target.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:EnableCompressionInSingleFile=true \
+            -o ./dist/${{ matrix.target.rid }}
+
+      - name: Package tar.gz archive
+        run: |
+          chmod +x ./dist/${{ matrix.target.rid }}/BE3600Toolbox.Cli
+          mkdir -p ./dist/archives
+          tar -czvf ./dist/archives/${{ matrix.target.name }}.tar.gz -C ./dist/${{ matrix.target.rid }} BE3600Toolbox.Cli
+
+      - name: Upload CLI Artifact (${{ matrix.target.rid }})
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.target.name }}
+          path: ./dist/archives/${{ matrix.target.name }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-windows, build-cli-crossplatform]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all build archives
+        uses: actions/download-artifact@v8
+        with:
+          path: ./dist/release
+          pattern: 'BE3600Toolbox-*'
+          merge-multiple: true
+
+      - name: Display downloaded archives
+        run: ls -la ./dist/release
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            ./dist/release/*.zip
+            ./dist/release/*.tar.gz
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+

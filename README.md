@@ -75,13 +75,28 @@ dotnet run --project src/BE3600Toolbox.Desktop
 ```
 
 ### Публикация Single-File сборки (без внешних зависимостей)
-Для Windows x64:
+
+В репозитории настроен автоматический CI/CD (GitHub Actions), который при каждом релизе собирает и публикует готовые автономные архивы:
+- **Windows:** `BE3600Toolbox-Desktop-win-x64.zip`, `BE3600Toolbox-Cli-win-x64.zip`
+- **Linux:** `BE3600Toolbox-Cli-linux-x64.tar.gz`, `BE3600Toolbox-Cli-linux-arm64.tar.gz`
+- **macOS:** `BE3600Toolbox-Cli-osx-arm64.tar.gz` (Apple Silicon M1-M4), `BE3600Toolbox-Cli-osx-x64.tar.gz` (Intel)
+
+Для ручной сборки CLI под любую из платформ:
 ```bash
+# Windows (x64)
 dotnet publish src/BE3600Toolbox.Cli -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ./publish/cli-win-x64
-```
-Для Linux x64:
-```bash
+
+# Linux (x64 / PC, серверы)
 dotnet publish src/BE3600Toolbox.Cli -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o ./publish/cli-linux-x64
+
+# Linux (ARM64 / Raspberry Pi и др.)
+dotnet publish src/BE3600Toolbox.Cli -c Release -r linux-arm64 --self-contained -p:PublishSingleFile=true -o ./publish/cli-linux-arm64
+
+# macOS (Apple Silicon / M1, M2, M3, M4)
+dotnet publish src/BE3600Toolbox.Cli -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o ./publish/cli-osx-arm64
+
+# macOS (Intel)
+dotnet publish src/BE3600Toolbox.Cli -c Release -r osx-x64 --self-contained -p:PublishSingleFile=true -o ./publish/cli-osx-x64
 ```
 
 ---
