@@ -3,32 +3,645 @@
         xmlns:vm="using:BE3600Toolbox.Desktop.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="400"
+        mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="700"
         x:Class="BE3600Toolbox.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Xiaomi BE3600 Toolbox"
-        Width="650" Height="450"
+        Width="1024" Height="800"
+        MinWidth="860" MinHeight="580"
         WindowStartupLocation="CenterScreen">
 
-    <StackPanel Margin="24" Spacing="16">
-        <TextBlock Text="Xiaomi BE3600 Toolbox" FontSize="20" FontWeight="Bold" />
-        <TextBlock Text="Cross-platform utility for SSH unlock, localization, and OpenWrt flashing"
-                   Foreground="Gray" />
+    <Window.Styles>
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="{DynamicResource SystemChromeMediumLowColor}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SystemChromeHighColor}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+        <Style Selector="TextBlock.card-title">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Margin" Value="0,0,0,14" />
+        </Style>
+        <Style Selector="TextBlock.field-label">
+            <Setter Property="Foreground" Value="{DynamicResource SystemBaseMediumColor}" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.field-value">
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.badge">
+            <Setter Property="CornerRadius" Value="12" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.badge-text">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+    </Window.Styles>
 
-        <Separator />
+    <Grid RowDefinitions="Auto,*,Auto,Auto" Margin="20">
+        <!-- 1. Header & Quick Connection Bar -->
+        <Grid Grid.Row="0" Margin="0,0,0,16" RowDefinitions="Auto,Auto">
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="0,0,0,14">
+                <StackPanel Grid.Column="0" Spacing="2">
+                    <TextBlock Text="Xiaomi BE3600 Toolbox" FontSize="20" FontWeight="Bold" />
+                    <TextBlock Text="Утилита управления роутером: разблокировка SSH, локализация, бэкап и OpenWrt"
+                               Foreground="{DynamicResource SystemBaseMediumColor}" FontSize="12" />
+                </StackPanel>
 
-        <StackPanel Orientation="Horizontal" Spacing="12">
-            <TextBlock Text="Router IP:" VerticalAlignment="Center" Width="80" />
-            <TextBox Text="{Binding RouterIp}" Width="200" IsEnabled="{Binding !IsBusy}" Watermark="e.g. 192.168.31.1" />
-            <Button Content="Connect" Command="{Binding CheckRouterCommand}" IsEnabled="{Binding !IsBusy}" />
-            <Button Content="Auto-Detect" Command="{Binding AutoDetectRouterCommand}" IsEnabled="{Binding !IsBusy}" />
-        </StackPanel>
+                <!-- Status Badges -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                    <!-- HTTP Status -->
+                    <Border Classes="badge" Background="{Binding HttpBadgeColor}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="HTTP:" Classes="badge-text" Opacity="0.8" />
+                            <TextBlock Text="{Binding HttpBadgeText}" Classes="badge-text" />
+                        </StackPanel>
+                    </Border>
 
-        <StackPanel Orientation="Horizontal" Spacing="12">
-            <Button Content="Unlock SSH" Command="{Binding UnlockSshCommand}" IsEnabled="{Binding !IsBusy}" />
-        </StackPanel>
+                    <!-- SSH Status -->
+                    <Border Classes="badge" Background="{Binding SshBadgeColor}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="SSH:" Classes="badge-text" Opacity="0.8" />
+                            <TextBlock Text="{Binding SshBadgeText}" Classes="badge-text" />
+                        </StackPanel>
+                    </Border>
 
-        <ProgressBar Value="{Binding ProgressValue}" Maximum="100" IsIndeterminate="{Binding IsBusy}" Height="8" IsVisible="{Binding IsBusy}" />
-        <TextBlock Text="{Binding StatusMessage}" FontStyle="Italic" />
-    </StackPanel>
+                    <!-- Model Check -->
+                    <Border Classes="badge" Background="{Binding ModelBadgeColor}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <TextBlock Text="Модель:" Classes="badge-text" Opacity="0.8" />
+                            <TextBlock Text="{Binding ModelBadgeText}" Classes="badge-text" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+
+            <!-- IP and Actions Bar -->
+            <Border Grid.Row="1" Classes="card" Padding="12,10">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <TextBlock Grid.Column="0" Text="IP адрес роутера:"
+                               Classes="field-label" Margin="0,0,10,0" />
+
+                    <TextBox Grid.Column="1" Text="{Binding RouterIp}"
+                             IsEnabled="{Binding !IsBusy}"
+                             Watermark="192.168.31.1"
+                             VerticalAlignment="Center"
+                             Margin="0,0,12,0" />
+
+                    <Button Grid.Column="2" Content="Обновить данные"
+                            Command="{Binding RefreshDeviceInfoCommand}"
+                            IsEnabled="{Binding !IsBusy}"
+                            Classes="accent"
+                            Margin="0,0,8,0" />
+
+                    <Button Grid.Column="3" Content="Автопоиск"
+                            Command="{Binding AutoDetectRouterCommand}"
+                            IsEnabled="{Binding !IsBusy}" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- 2. Main Content Tabs -->
+        <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedTabIndex}" Margin="0,0,0,12">
+            <!-- TAB 1: Информация и обзор -->
+            <TabItem Header="📊 Информация об устройстве">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid ColumnDefinitions="*,*" Margin="0,12,0,0">
+                        <!-- Left Column: Device Info Card -->
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0" Spacing="14">
+                            <Border Classes="card">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Параметры роутера" Classes="card-title" />
+
+                                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" Margin="4,0">
+                                        <!-- Model -->
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Модель:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DeviceModel}" Classes="field-value" Margin="0,4" />
+
+                                        <!-- Hardware -->
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Аппаратная часть:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DeviceHardware}" Classes="field-value" Margin="0,4" />
+
+                                        <!-- Firmware -->
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Версия ROM:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding DeviceFirmware}" Classes="field-value" Margin="0,4" />
+
+                                        <!-- Channel -->
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Канал выпуска:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding DeviceChannel}" Classes="field-value" Margin="0,4" />
+
+                                        <!-- Serial Number -->
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Серийный номер:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding DeviceSerialNumber}" Classes="field-value" Margin="0,4" />
+                                    </Grid>
+
+                                    <!-- Warning if device is not RD15 -->
+                                    <Border IsVisible="{Binding !IsModelBe3600}"
+                                            Background="#22FF9800"
+                                            BorderBrush="#FF9800"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="10,8"
+                                            Margin="0,8,0,0">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="⚠️" FontSize="16" VerticalAlignment="Center" />
+                                            <TextBlock Text="Внимание: роутер не опознан как RD15 (BE3600). Некоторые действия могут быть заблокированы ради безопасности."
+                                                       TextWrapping="Wrap"
+                                                       FontSize="11"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Guidance Card -->
+                            <Border Classes="card">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="Рекомендации по работе" Classes="card-title" />
+                                    <TextBlock Text="1. Убедитесь, что IP адрес роутера указан корректно (стандартный: 192.168.31.1)."
+                                               FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                    <TextBlock Text="2. Если SSH порт закрыт, разблокируйте доступ во вкладке 'Разблокировка SSH'."
+                                               FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                    <TextBlock Text="3. Заводской пароль root рассчитывается автоматически по алгоритму Xiaomi из серийного номера роутера."
+                                               FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Right Column: SSH Credentials & Connection Card -->
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="14">
+                            <Border Classes="card">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Заводской доступ SSH" Classes="card-title" />
+
+                                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto" Margin="4,0">
+                                        <!-- User -->
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Пользователь:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="root" Classes="field-value" Margin="0,4" />
+
+                                        <!-- Port -->
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Порт:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="22" Classes="field-value" Margin="0,4" />
+
+                                        <!-- Password -->
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Пароль по S/N:" Classes="field-label" Margin="0,4" />
+                                        <Grid Grid.Row="2" Grid.Column="1" ColumnDefinitions="*,Auto,Auto" Margin="0,4">
+                                            <TextBox Grid.Column="0"
+                                                     Text="{Binding MaskedSshPassword}"
+                                                     IsReadOnly="True"
+                                                     FontFamily="Consolas, monospace"
+                                                     VerticalAlignment="Center" />
+                                            <Button Grid.Column="1"
+                                                    Content="{Binding PasswordToggleIcon}"
+                                                    ToolTip.Tip="{Binding PasswordToggleToolTip}"
+                                                    Command="{Binding TogglePasswordVisibilityCommand}"
+                                                    Padding="8,4"
+                                                    Margin="6,0,0,0" />
+                                            <Button Grid.Column="2"
+                                                    Content="Скопировать"
+                                                    Command="{Binding CopySshPasswordCommand}"
+                                                    Margin="6,0,0,0" />
+                                        </Grid>
+                                    </Grid>
+
+                                    <Separator Margin="0,4" />
+
+                                    <Button Content="Проверить SSH-соединение"
+                                            Command="{Binding TestSshConnectionCommand}"
+                                            IsEnabled="{Binding !IsBusy}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            Padding="0,8" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="card">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="Следующие шаги" Classes="card-title" />
+                                    <TextBlock Text="После успешной проверки соединения вам будут доступны:"
+                                               FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="4,2">
+                                        <TextBlock Text="•" Foreground="{DynamicResource SystemBaseMediumColor}" />
+                                        <TextBlock Text="Установка русской и английской локализации Web-интерфейса" FontSize="12" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="4,2">
+                                        <TextBlock Text="•" Foreground="{DynamicResource SystemBaseMediumColor}" />
+                                        <TextBlock Text="Закрепление SSH в автозагрузке (Permanent SSH)" FontSize="12" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="4,2">
+                                        <TextBlock Text="•" Foreground="{DynamicResource SystemBaseMediumColor}" />
+                                        <TextBlock Text="Создание резервной копии MTD-разделов и прошивка OpenWrt" FontSize="12" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 2: Разблокировка SSH -->
+            <TabItem Header="🔓 Разблокировка SSH">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid ColumnDefinitions="*,*" Margin="0,12,0,0">
+                        <!-- Left Column: Status and Parameters Card -->
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0" Spacing="14">
+                            <Border Classes="card">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Статус и параметры" Classes="card-title" />
+
+                                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto" Margin="4,0">
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Адрес роутера:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding RouterIp}" Classes="field-value" Margin="0,4" />
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Модель роутера:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding DeviceModel}" Classes="field-value" Margin="0,4" />
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Служба SSH:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SshBadgeText}" Classes="field-value" Margin="0,4" />
+                                    </Grid>
+
+                                    <Separator Margin="0,4" />
+
+                                    <TextBlock Text="Что происходит во время разблокировки:"
+                                               FontWeight="SemiBold" FontSize="12" Margin="0,4,0,2" />
+
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="4,2">
+                                        <TextBlock Text="1." Foreground="{DynamicResource SystemBaseMediumColor}" FontWeight="Bold" />
+                                        <TextBlock Text="POST /api/xqsystem/login — вход и получение токена stok" FontSize="11" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="4,2">
+                                        <TextBlock Text="2." Foreground="{DynamicResource SystemBaseMediumColor}" FontWeight="Bold" />
+                                        <TextBlock Text="nvram set ssh_en=1 &amp;&amp; nvram commit — включение флага SSH" FontSize="11" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="4,2">
+                                        <TextBlock Text="3." Foreground="{DynamicResource SystemBaseMediumColor}" FontWeight="Bold" />
+                                        <TextBlock Text="Перевод dropbear в режим отладки (channel=debug)" FontSize="11" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="4,2">
+                                        <TextBlock Text="4." Foreground="{DynamicResource SystemBaseMediumColor}" FontWeight="Bold" />
+                                        <TextBlock Text="/etc/init.d/dropbear start — запуск службы SSH на порту 22" FontSize="11" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Guardrail Warning if not RD15 -->
+                            <Border IsVisible="{Binding !IsModelBe3600}"
+                                    Background="#22FF9800"
+                                    BorderBrush="#FF9800"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="12,10">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="⚠️ Внимание: модель роутера не RD15" FontWeight="Bold" FontSize="12" />
+                                    <TextBlock Text="Эксплойт тестировался для Xiaomi BE3600 (RD15). На других роутерах API может отличаться."
+                                               FontSize="11" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Right Column: Exploit Action Card & Important Info -->
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="14">
+                            <Border Classes="card">
+                                <StackPanel Spacing="14">
+                                    <TextBlock Text="Авторизация и эксплойт" Classes="card-title" />
+
+                                    <TextBlock Text="Для получения временного доступа SSH утилита авторизуется в веб-интерфейсе роутера, получает сессионный токен (stok) и выполняет инъекцию команд через start_binding."
+                                               FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+
+                                    <!-- Notification that password will be prompted -->
+                                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,4">
+                                        <TextBlock Text="🔑" FontSize="13" VerticalAlignment="Center" />
+                                        <TextBlock Text="Потребуется пароль администратора роутера"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource SystemBaseMediumColor}"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <Button Content="Разблокировать временный SSH"
+                                            Command="{Binding UnlockSshCommand}"
+                                            IsEnabled="{Binding !IsBusy}"
+                                            Classes="accent"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            Padding="0,10"
+                                            FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="card">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="💡 Важная информация" Classes="card-title" />
+                                    <TextBlock Text="Этот метод открывает временный SSH — служба работает только до первой перезагрузки роутера. Чтобы сделать доступ постоянным, перейдите на вкладку 'Постоянный SSH'."
+                                               FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 3: Локализация (RU/EN) -->
+            <TabItem Header="🌐 Локализация (RU/EN)">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid ColumnDefinitions="*,*" Margin="0,12,0,0">
+                        <!-- Left Column: Package Details -->
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0" Spacing="14">
+                            <Border Classes="card">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Состав языковых пакетов" Classes="card-title" />
+
+                                    <Border Background="{DynamicResource SystemChromeLowColor}"
+                                            BorderBrush="{DynamicResource SystemChromeHighColor}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="12,10"
+                                            Margin="0,3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <Border Grid.Column="0"
+                                                    Background="{DynamicResource AccentButtonBackground}"
+                                                    CornerRadius="4"
+                                                    Padding="7,3"
+                                                    VerticalAlignment="Center"
+                                                    Margin="0,0,12,0">
+                                                <TextBlock Text="RU"
+                                                           FontWeight="Bold"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource AccentButtonForeground}" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" Spacing="2">
+                                                <TextBlock Text="Русский (base.ru.po)" FontWeight="SemiBold" FontSize="13" />
+                                                <TextBlock Text="Перевод основных разделов настроек, Wi-Fi и сети."
+                                                           FontSize="11" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <Border Background="{DynamicResource SystemChromeLowColor}"
+                                            BorderBrush="{DynamicResource SystemChromeHighColor}"
+                                            BorderThickness="1"
+                                            CornerRadius="6"
+                                            Padding="12,10"
+                                            Margin="0,3">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <Border Grid.Column="0"
+                                                    Background="{DynamicResource AccentButtonBackground}"
+                                                    CornerRadius="4"
+                                                    Padding="7,3"
+                                                    VerticalAlignment="Center"
+                                                    Margin="0,0,12,0">
+                                                <TextBlock Text="EN"
+                                                           FontWeight="Bold"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource AccentButtonForeground}" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" Spacing="2">
+                                                <TextBlock Text="English (base.en.po)" FontWeight="SemiBold" FontSize="13" />
+                                                <TextBlock Text="Английский перевод интерфейса MiWiFi."
+                                                           FontSize="11" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+
+                                    <Separator Margin="0,4" />
+
+                                    <TextBlock Text="Механизм установки:" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Text="Встроенный C#-компилятор LMO преобразует PO-файлы на лету bit-for-bit без необходимости сторонних утилит. Скрипт lang_patch.sh сохраняет резервную копию системных файлов перед модификацией."
+                                               FontSize="11" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Right Column: Actions Card & Post-install Instructions -->
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="14">
+                            <Border Classes="card">
+                                <StackPanel Spacing="14">
+                                    <TextBlock Text="Управление локализацией" Classes="card-title" />
+
+                                    <TextBlock Text="Утилита компилирует языковые пакеты base.ru.po и base.en.po в бинарный формат LMO на лету, загружает их в роутер по SSH и внедряет в веб-интерфейс LuCI."
+                                               FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+
+                                    <StackPanel Spacing="8">
+                                        <Button Content="Установить русскую и английскую локализацию"
+                                                Command="{Binding InstallLanguagesCommand}"
+                                                IsEnabled="{Binding !IsBusy}"
+                                                Classes="accent"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Center"
+                                                Padding="0,10"
+                                                FontWeight="SemiBold" />
+
+                                        <Button Content="Удалить локализацию (восстановить сток)"
+                                                Command="{Binding UninstallLanguagesCommand}"
+                                                IsEnabled="{Binding !IsBusy}"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Center"
+                                                Padding="0,8" />
+                                    </StackPanel>
+
+                                    <Separator Margin="0,4" />
+
+                                    <TextBlock Text="Требование: роутер должен быть доступен по SSH (порт 22). Если SSH ещё не разблокирован, сначала перейдите на вкладку 'Разблокировка SSH'."
+                                               FontSize="11" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="card">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Инструкция после установки" Classes="card-title" />
+                                    <TextBlock Text="1. Дождитесь завершения операции в журнале логов (100%)." FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" />
+                                    <TextBlock Text="2. Откройте в браузере веб-панель роутера (http://192.168.31.1)." FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" />
+                                    <TextBlock Text="3. Нажмите Ctrl+F5 для сброса кэша страницы." FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" />
+                                    <TextBlock Text="4. Язык нельзя выбрать через обычный выпадающий список. По умолчанию активируется английский язык; переключить на русский можно глубоко в настройках роутера: «Настройки» → «Состояние» (в блоке сведений о системе)." FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 4: Постоянный SSH -->
+            <TabItem Header="⚙️ Постоянный SSH">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid ColumnDefinitions="*,*" Margin="0,12,0,0">
+                        <!-- Left Column: Details & Technical Notes -->
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0" Spacing="14">
+                            <Border Classes="card">
+                                <StackPanel Spacing="12">
+                                    <TextBlock Text="Параметры подключения root" Classes="card-title" />
+
+                                    <Grid ColumnDefinitions="140,*" RowDefinitions="Auto,Auto,Auto" Margin="4,0">
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Пользователь:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="0" Grid.Column="1" Text="root" Classes="field-value" Margin="0,4" />
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Порт SSH:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="22" Classes="field-value" Margin="0,4" />
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Заводской пароль:" Classes="field-label" Margin="0,4" />
+                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CalculatedSshPassword}" Classes="field-value" FontFamily="Consolas, monospace" Margin="0,4" />
+                                    </Grid>
+
+                                    <Separator Margin="0,4" />
+
+                                    <TextBlock Text="Как это работает:" FontWeight="SemiBold" FontSize="12" />
+                                    <TextBlock Text="1. Скрипт ssh_patch.sh модифицирует конфигурацию NVRAM и скрипт автозапуска /etc/init.d/dropbear."
+                                               FontSize="11" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                    <TextBlock Text="2. Создаётся хук в /etc/hotplug.d/ или скриптах загрузки, который стартует службу dropbear при включении питания."
+                                               FontSize="11" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                    <TextBlock Text="3. При удалении твика все системные файлы возвращаются к оригинальным стоковым значениям."
+                                               FontSize="11" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <!-- Right Column: Permanent SSH Actions -->
+                        <StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="14">
+                            <Border Classes="card">
+                                <StackPanel Spacing="14">
+                                    <TextBlock Text="Управление постоянным SSH" Classes="card-title" />
+
+                                    <TextBlock Text="Штатно Xiaomi выключает SSH при перезагрузке роутера. Данный модуль устанавливает скрипт автозапуска в систему, благодаря чему SSH остаётся активным после выключения питания или ребута."
+                                               FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+
+                                    <StackPanel Spacing="8">
+                                        <Button Content="Установить постоянный SSH в автозапуск"
+                                                Command="{Binding InstallPermanentSshCommand}"
+                                                IsEnabled="{Binding !IsBusy}"
+                                                Classes="accent"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Center"
+                                                Padding="0,10"
+                                                FontWeight="SemiBold" />
+
+                                        <Button Content="Удалить постоянный SSH (восстановить сток)"
+                                                Command="{Binding UninstallPermanentSshCommand}"
+                                                IsEnabled="{Binding !IsBusy}"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Center"
+                                                Padding="0,8" />
+                                    </StackPanel>
+
+                                    <Separator Margin="0,4" />
+
+                                    <Button Content="Проверить SSH-соединение"
+                                            Command="{Binding TestSshConnectionCommand}"
+                                            IsEnabled="{Binding !IsBusy}"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Center"
+                                            Padding="0,8" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Classes="card">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="💡 Рекомендация" Classes="card-title" />
+                                    <TextBlock Text="Перед прошивкой стороннего ПО (OpenWrt) настоятельно рекомендуется зафиксировать постоянный SSH, чтобы иметь резервный канал доступа в случае сбоев."
+                                               FontSize="12" Foreground="{DynamicResource SystemBaseMediumColor}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- TAB 5: Бэкап и Прошивка (Placeholder) -->
+            <TabItem Header="⚡ Бэкап и Flash">
+                <Border Classes="card" Margin="0,12,0,0">
+                    <StackPanel Spacing="12" VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="500">
+                        <TextBlock Text="⚡ Чтение MTD разделов и прошивка OpenWrt" FontSize="16" FontWeight="Bold" HorizontalAlignment="Center" />
+                        <TextBlock Text="Безопасный дамп разделов (bdata, Factory, bootloader) и валидация SHA256 с поддержкой Dry-Run."
+                                   TextWrapping="Wrap" TextAlignment="Center" Foreground="{DynamicResource SystemBaseMediumColor}" />
+                        <TextBlock Text="Будет доступно на следующем этапе интеграции." FontStyle="Italic" HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </TabItem>
+        </TabControl>
+
+        <!-- 3. Progress Bar & Step Status -->
+        <Grid Grid.Row="2" Margin="0,4,0,8" RowDefinitions="Auto,Auto">
+            <ProgressBar Grid.Row="0"
+                         Value="{Binding ProgressValue}"
+                         Maximum="100"
+                         Height="4"
+                         IsVisible="{Binding IsProgressVisible}"
+                         IsIndeterminate="{Binding IsBusy}"
+                         Margin="0,0,0,6" />
+
+            <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding StatusMessage}"
+                           FontWeight="Medium"
+                           FontSize="12" />
+
+                <TextBlock Grid.Column="1"
+                           Text="{Binding CurrentStepName}"
+                           Foreground="{DynamicResource SystemBaseMediumColor}"
+                           FontSize="12"
+                           Margin="12,0"
+                           TextTrimming="CharacterEllipsis" />
+
+                <Button Grid.Column="2"
+                        Content="{Binding LogPanelToggleText}"
+                        Command="{Binding ToggleLogsPanelCommand}"
+                        Padding="10,3"
+                        FontSize="11" />
+            </Grid>
+        </Grid>
+
+        <!-- 4. Collapsible Activity Log / Console View -->
+        <Border Grid.Row="3"
+                Classes="card"
+                Padding="10"
+                Height="160"
+                IsVisible="{Binding IsLogExpanded}"
+                Margin="0,4,0,0">
+            <Grid RowDefinitions="Auto,*">
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,6">
+                    <TextBlock Grid.Column="0"
+                               Text="Журнал операций (Console Output)"
+                               FontWeight="SemiBold"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+
+                    <Button Grid.Column="1"
+                            Content="Очистить"
+                            Command="{Binding ClearLogsCommand}"
+                            Padding="8,2"
+                            FontSize="11"
+                            Margin="0,0,6,0" />
+
+                    <Button Grid.Column="2"
+                            Content="Копировать всё"
+                            Command="{Binding CopyLogsCommand}"
+                            Padding="8,2"
+                            FontSize="11" />
+                </Grid>
+
+                <Border Grid.Row="1"
+                        Background="#14141E"
+                        CornerRadius="4"
+                        BorderBrush="#252538"
+                        BorderThickness="1">
+                    <ScrollViewer x:Name="LogsScrollViewer"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Padding="8,6">
+                        <SelectableTextBlock x:Name="LogsSelectableTextBlock"
+                                             FontFamily="Consolas, monospace"
+                                             FontSize="11"
+                                             Foreground="#CDD6F4"
+                                             SelectionBrush="#5589B4FA"
+                                             TextWrapping="Wrap" />
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
 </Window>

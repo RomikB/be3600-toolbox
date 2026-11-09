@@ -37,6 +37,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISettingsService, JsonSettingsService>();
         services.AddTransient<IRouterService, MiWiFiClient>();
         services.AddSingleton<ISshManager, SshManager>();
+        services.AddTransient<ISshConnectionService, SshConnectionService>();
         services.AddTransient<IFlashService, FlashService>();
         return services;
     }

@@ -114,6 +114,7 @@ var provider = services.BuildServiceProvider();
 var settingsService = provider.GetRequiredService<ISettingsService>();
 var router = provider.GetRequiredService<IRouterService>();
 var sshManager = provider.GetRequiredService<ISshManager>();
+var sshConn = provider.GetRequiredService<ISshConnectionService>();
 var interaction = provider.GetRequiredService<IInteractionService>();
 var logger = provider.GetRequiredService<ILogger<Program>>();
 
@@ -236,7 +237,7 @@ while (true)
                 break;
 
             case OptInstallLanguages:
-                if (!await EnsureSshConnectedAsync(ip))
+                if (!await sshConn.EnsureConnectedAsync(ip, progress))
                 {
                     continue;
                 }
@@ -248,7 +249,7 @@ while (true)
                 break;
 
             case OptPermanentSsh:
-                if (!await EnsureSshConnectedAsync(ip))
+                if (!await sshConn.EnsureConnectedAsync(ip, progress))
                 {
                     continue;
                 }
@@ -265,7 +266,7 @@ while (true)
                 break;
 
             case OptUninstallLanguages:
-                if (!await EnsureSshConnectedAsync(ip))
+                if (!await sshConn.EnsureConnectedAsync(ip, progress))
                 {
                     continue;
                 }
@@ -281,109 +282,6 @@ while (true)
     {
         Console.ForegroundColor = ConsoleColor.Red;
         Console.WriteLine($"[-] Error: {ex.Message}");
-        Console.ResetColor();
-    }
-}
-
-async Task<bool> CheckSshPortAsync(string targetIp, int port = 22)
-{
-    Console.WriteLine($"[*] Checking SSH availability on {targetIp}:{port}...");
-    var isOpen = await sshManager.IsPortOpenAsync(targetIp, port);
-    if (!isOpen)
-    {
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine($"[-] SSH is not available on {targetIp}:{port}. Port is closed or unreachable.");
-        Console.WriteLine("[-] Please unlock SSH first (select option 2).");
-        Console.ResetColor();
-        return false;
-    }
-
-    Console.ForegroundColor = ConsoleColor.Green;
-    Console.WriteLine($"[+] SSH port {port} is open on {targetIp}.");
-    Console.ResetColor();
-    return true;
-}
-
-async Task<string?> GetDefaultSshPasswordAsync(string targetIp)
-{
-    try
-    {
-        Console.WriteLine("[*] Retrieving router serial number via init_info...");
-        var info = await router.GetDeviceInfoAsync(targetIp);
-        if (!string.IsNullOrWhiteSpace(info.SerialNumber))
-        {
-            var preparedSn = XiaomiPasswordCalculator.NormalizeSerialNumber(info.SerialNumber);
-            var pwd = XiaomiPasswordCalculator.Calculate(preparedSn);
-            Console.WriteLine($"[+] Router S/N detected: {preparedSn}");
-            return pwd;
-        }
-    }
-    catch (Exception ex)
-    {
-        logger.LogWarning(ex, "Failed to retrieve device serial number from {Ip}", targetIp);
-    }
-
-    Console.ForegroundColor = ConsoleColor.Yellow;
-    Console.WriteLine("[-] Could not retrieve router serial number automatically.");
-    Console.ResetColor();
-    return null;
-}
-
-async Task<bool> EnsureSshConnectedAsync(string targetIp)
-{
-    if (sshManager.IsConnected)
-    {
-        return true;
-    }
-
-    var port = settingsService.Settings.SshPort;
-    var user = settingsService.Settings.SshUser;
-
-    // 1. Check SSH port availability
-    if (!await CheckSshPortAsync(targetIp, port))
-    {
-        return false;
-    }
-
-    // 2. Try default password calculated from router serial number
-    var defaultPassword = await GetDefaultSshPasswordAsync(targetIp);
-    if (!string.IsNullOrWhiteSpace(defaultPassword))
-    {
-        Console.WriteLine($"[*] Trying calculated default SSH password ('{defaultPassword}')...");
-        if (await sshManager.TryConnectAsync(targetIp, port, user, defaultPassword))
-        {
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("[+] SSH connected successfully using calculated default password!");
-            Console.ResetColor();
-            return true;
-        }
-
-        Console.ForegroundColor = ConsoleColor.Yellow;
-        Console.WriteLine("[-] Calculated default password rejected.");
-        Console.ResetColor();
-    }
-
-    // 3. Prompt user for password if default didn't work
-    while (true)
-    {
-        var password = await interaction.PromptPasswordAsync($"Enter SSH password for '{user}' (leave empty to cancel)");
-        if (string.IsNullOrWhiteSpace(password))
-        {
-            Console.WriteLine("[-] SSH authentication cancelled.");
-            return false;
-        }
-
-        Console.WriteLine("[*] Authenticating with SSH...");
-        if (await sshManager.TryConnectAsync(targetIp, port, user, password))
-        {
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine("[+] SSH connected successfully!");
-            Console.ResetColor();
-            return true;
-        }
-
-        Console.ForegroundColor = ConsoleColor.Red;
-        Console.WriteLine("[-] SSH authentication failed. Invalid password, please try again.");
         Console.ResetColor();
     }
 }

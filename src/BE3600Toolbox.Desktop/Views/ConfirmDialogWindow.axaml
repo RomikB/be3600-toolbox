@@ -1,0 +1,42 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="BE3600Toolbox.Desktop.Views.ConfirmDialogWindow"
+        Title="Подтверждение"
+        Width="460" Height="210"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False">
+
+    <Grid Margin="24" RowDefinitions="*,Auto">
+        <StackPanel Grid.Row="0" Spacing="10">
+            <TextBlock Name="TitleTextBlock"
+                       Text="Подтверждение действия"
+                       FontWeight="Bold"
+                       FontSize="15" />
+
+            <TextBlock Name="MessageTextBlock"
+                       Text="Вы уверены, что хотите продолжить?"
+                       TextWrapping="Wrap"
+                       FontSize="13" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="12"
+                    Margin="0,16,0,0">
+            <Button Name="CancelButton"
+                    Content="Отмена"
+                    Click="OnCancelClick"
+                    IsCancel="True"
+                    Width="100"
+                    HorizontalContentAlignment="Center" />
+            <Button Name="OkButton"
+                    Content="Подтвердить"
+                    Click="OnOkClick"
+                    Classes="accent"
+                    IsDefault="True"
+                    Width="120"
+                    HorizontalContentAlignment="Center" />
+        </StackPanel>
+    </Grid>
+</Window>
